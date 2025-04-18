@@ -9,7 +9,8 @@ import gspread
 import datetime
 import numpy as np
 from itertools import product
-import datetime
+import time
+import csv
 
 
 def load_data():
@@ -206,6 +207,14 @@ class TradingViewStrategy(bt.Strategy):
                 )
 
 
+# Function to write data to csv
+def write_to_csv(data):
+    csvFile = "backtrader-optimization-ethusdt.csv"
+    with open(csvFile, mode="a", newline="", encoding="utf-8") as file:
+        writer = csv.writer(file)
+        writer.writerow(data)
+
+
 # Function to write results to Google Sheets
 def clear_google_sheet(sheet_id):
     # Define scope and authenticate
@@ -225,24 +234,97 @@ def clear_google_sheet(sheet_id):
     sheet.clear()
 
 
+def write_header():
+    analysis_results_headers = [
+        "date_time",
+        # Parameters
+        "ema_short",
+        "ema_medium",
+        "ema_long",
+        "atr_period",
+        "atr_multiplier",
+        "rsi_period",
+        "rsi_long_lower",
+        "rsi_long_upper",
+        "rsi_short_lower",
+        "rsi_short_upper",
+        "length",
+        "percentile_low",
+        "percentile_high",
+        "risk_percent",
+        "risk_multiplier",
+        "max_risk_percent",
+        "reward_risk_ratio",
+        # Sharpe Ratio
+        "Sharpe Ratio",
+        # Drawdown Analysis
+        "Current Drawdown (%)",
+        "Money Down",
+        "Max Drawdown (%)",
+        "Max Money Down",
+        "Max Drawdown Length (bars)",
+        # Trade Analysis
+        "Total Trades",
+        "Open Trades",
+        "Closed Trades",
+        "Winning Streak",
+        "Longest Winning Streak",
+        "Losing Streak",
+        "Longest Losing Streak",
+        # Profit and Loss (PnL)
+        "Gross PnL",
+        "Average PnL",
+        "Net PnL",
+        # Winning Trades
+        "Total Wins",
+        "Total Win PnL",
+        "Average Win PnL",
+        "Maximum Win",
+        # Losing Trades
+        "Total Losses",
+        "Total Loss PnL",
+        "Average Loss PnL",
+        "Maximum Loss",
+    ]
+    sheet_id = "1PowXxg89fAhbKlEdKacm-qDWyLH99U8Y2QDTLuCHiBk"
+    clear_google_sheet(sheet_id)
+    write_to_google_sheet(sheet_id, analysis_results_headers)
+
+
 # Function to write results to Google Sheets
 def write_to_google_sheet(sheet_id, data):
-    # Define scope and authenticate
-    scope = [
-        "https://spreadsheets.google.com/feeds",
-        "https://www.googleapis.com/auth/drive",
-    ]
-    creds = "kmm-scan-eth-blocks-dc989520c58e.json"
-    # creds = ServiceAccountCredentials.from_json_keyfile_name("path_to_your_service_account.json", scope)
-    # client = gspread.authorize(creds)
-    client = gspread.auth.service_account(creds, scope)
+    counter = 0
+    max_retry = 5
+    wait_time = 5
+    write_success = False
 
-    # Open the spreadsheet and select the sheet
-    sheet = client.open_by_key(sheet_id).worksheet(
-        "Sheet1"
-    )  # Assuming single sheet; adjust if needed
-    # Append data
-    sheet.append_row(data)
+    while not write_success:
+        try:
+            # Define scope and authenticate
+            scope = [
+                "https://spreadsheets.google.com/feeds",
+                "https://www.googleapis.com/auth/drive",
+            ]
+            creds = "kmm-scan-eth-blocks-dc989520c58e.json"
+            # creds = ServiceAccountCredentials.from_json_keyfile_name("path_to_your_service_account.json", scope)
+            # client = gspread.authorize(creds)
+            client = gspread.auth.service_account(creds, scope)
+
+            # Open the spreadsheet and select the sheet
+            sheet = client.open_by_key(sheet_id).worksheet(
+                "Sheet1"
+            )  # Assuming single sheet; adjust if needed
+            # Append data
+            sheet.append_row(data)
+            write_success = True
+        except:
+            if counter <= max_retry:
+                counter = counter + 1
+                time.sleep(wait_time)
+                wait_time = wait_time * 2
+            else:
+                write_success = True
+    write_to_csv(data)
 
 
 def main(**param_dict):
@@ -404,63 +486,6 @@ def main(**param_dict):
     sharpe_analysis = None
     drawdown_analysis = None
     trade_analysis = None
-
-
-def write_header():
-    analysis_results_headers = [
-        "date_time",
-        # Parameters
-        "ema_short",
-        "ema_medium",
-        "ema_long",
-        "atr_period",
-        "atr_multiplier",
-        "rsi_period",
-        "rsi_long_lower",
-        "rsi_long_upper",
-        "rsi_short_lower",
-        "rsi_short_upper",
-        "length",
-        "percentile_low",
-        "percentile_high",
-        "risk_percent",
-        "risk_multiplier",
-        "max_risk_percent",
-        "reward_risk_ratio",
-        # Sharpe Ratio
-        "Sharpe Ratio",
-        # Drawdown Analysis
-        "Current Drawdown (%)",
-        "Money Down",
-        "Max Drawdown (%)",
-        "Max Money Down",
-        "Max Drawdown Length (bars)",
-        # Trade Analysis
-        "Total Trades",
-        "Open Trades",
-        "Closed Trades",
-        "Winning Streak",
-        "Longest Winning Streak",
-        "Losing Streak",
-        "Longest Losing Streak",
-        # Profit and Loss (PnL)
-        "Gross PnL",
-        "Average PnL",
-        "Net PnL",
-        # Winning Trades
-        "Total Wins",
-        "Total Win PnL",
-        "Average Win PnL",
-        "Maximum Win",
-        # Losing Trades
-        "Total Losses",
-        "Total Loss PnL",
-        "Average Loss PnL",
-        "Maximum Loss",
-    ]
-    sheet_id = "1PowXxg89fAhbKlEdKacm-qDWyLH99U8Y2QDTLuCHiBk"
-    clear_google_sheet(sheet_id)
-    write_to_google_sheet(sheet_id, analysis_results_headers)
 
 
 def loopMain():
