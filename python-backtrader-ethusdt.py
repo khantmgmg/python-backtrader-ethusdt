@@ -121,27 +121,6 @@ class TradingViewStrategy(bt.Strategy):
     def notify_order(self, order):
         if order.status in [order.Submitted, order.Accepted]:
             return  # Order is active
-
-        # if order.status in [order.Completed]:
-        #     # print("")
-        #     if order.isbuy():
-        #         print(f"BUY EXECUTED at {order.executed.price}")
-        #     elif order.issell():
-        #         print(f"SELL EXECUTED at {order.executed.price}")
-
-        # If the order was a loss, store the loss amount
-        # print(order)
-        # if order.isbuy() and order.executed.price < self.data.close[0]:  # Buy order resulted in a loss
-        #     self.previous_loss = self.previous_loss or 0
-        #     print(f"Hit stoploss. Losing {self.previous_loss}")
-        # elif order.issell() and order.executed.price > self.data.close[0]:  # Sell order resulted in a loss
-        #     self.previous_loss = self.previous_loss or 0
-        #     print(f"Hit stoploss. Losing {self.previous_loss}")
-
-        # elif order.status in [order.Canceled, order.Margin, order.Rejected]:
-        #     print(f"Order Canceled/Margin/Rejected: {order.status}")
-
-        # Reset the order after completion
         self.order = None
 
     def next(self):
@@ -196,13 +175,6 @@ class TradingViewStrategy(bt.Strategy):
                 )
                 quantity = round(risk_amount / abs(self.data.close[0] - stop_loss), 3)
 
-                # Debugging information
-                # print("")
-                # print("-" * 20)
-                # print(f"previous loss: {self.previous_loss}")
-                # print(f"Long Entry Signal")
-                # print(f"Balance: {available_balance}, Risk amount: {risk_amount}, Entry: {self.data.close[0]}, "
-                #     f"Stoploss: {stop_loss}, Takeprofit: {take_profit}, Quantity: {quantity}")
                 # Bracket order for long position
                 self.buy_bracket(
                     size=quantity,
@@ -225,14 +197,6 @@ class TradingViewStrategy(bt.Strategy):
                     self.data.close[0] - (atr_value * self.params.reward_risk_ratio), 2
                 )
                 quantity = round(risk_amount / abs(self.data.close[0] - stop_loss), 3)
-
-                # Debugging information
-                # print("")
-                # print("-" * 20)
-                # print(f"previous loss: {self.previous_loss}")
-                # print(f"Short Entry Signal")
-                # print(f"Balance: {available_balance}, Risk amount: {risk_amount}, Entry: {self.data.close[0]}, "
-                #     f"Stoploss: {stop_loss}, Takeprofit: {take_profit}, Quantity: {quantity}")
 
                 # Bracket order for short position
                 self.sell_bracket(
@@ -281,12 +245,15 @@ def write_to_google_sheet(sheet_id, data):
     sheet.append_row(data)
 
 
-def main():
+def main(**param_dict):
     # Initialize Cerebro
     cerebro = bt.Cerebro()
 
     # Add Strategy
-    cerebro.addstrategy(TradingViewStrategy)
+    if param_dict:
+        cerebro.addstrategy(TradingViewStrategy, **param_dict)
+    else:
+        cerebro.addstrategy(TradingViewStrategy)
 
     # Add Data
     cerebro.adddata(load_data())
@@ -307,63 +274,136 @@ def main():
     # Run Backtest
     results = cerebro.run()
     strategy = results[0]  # Access the first strategy in the results
-
-    # Display Ending Portfolio Value
-    print("Ending Portfolio Value: {:.2f}".format(cerebro.broker.getvalue()))
-
-    # Analyze and Display Results
-    print(f"\n--- Analysis Results ({start_date} to {end_date}) ---\n")
-
-    # Sharpe Ratio
     sharpe_analysis = strategy.analyzers.sharpe.get_analysis()
-    print("### Sharpe Ratio")
-    print(f"  Sharpe Ratio: {sharpe_analysis.get('sharperatio', 'N/A')}")
-
-    # Drawdown Analysis
     drawdown_analysis = strategy.analyzers.drawdown.get_analysis()
-    print("\n### Drawdown Analysis")
-    print(f"  Current Drawdown: {drawdown_analysis['drawdown']:.2f}%")
-    print(f"  Money Down: ${drawdown_analysis['moneydown']:.2f}")
-    print(f"  Max Drawdown: {drawdown_analysis['max']['drawdown']:.2f}%")
-    print(f"  Max Money Down: ${drawdown_analysis['max']['moneydown']:.2f}")
-    print(f"  Max Drawdown Length: {drawdown_analysis['max']['len']} bars")
-
-    # Trade Analysis
     trade_analysis = strategy.analyzers.trades.get_analysis()
-    print("\n### Trade Analysis")
-    print("- Total Trades: {}".format(trade_analysis.total.total))
-    print("  - Open Trades: {}".format(trade_analysis.total.open))
-    print("  - Closed Trades: {}".format(trade_analysis.total.closed))
-    print(
-        "- Winning Streak: {} (Longest: {})".format(
-            trade_analysis.streak.won.current, trade_analysis.streak.won.longest
+
+    if param_dict:
+        # Display Starting Portfolio Value
+        print(f"Running with {param_dict}")
+        print("Starting Portfolio Value: {:.2f}".format(cerebro.broker.getvalue()))
+
+        # Create data list
+        data = [
+            datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),  # Timestamp
+            param_dict["ema_short"],
+            param_dict["ema_medium"],
+            param_dict["ema_long"],
+            param_dict["atr_period"],
+            param_dict["atr_multiplier"],
+            param_dict["rsi_period"],
+            param_dict["rsi_long_lower"],
+            param_dict["rsi_long_upper"],
+            param_dict["rsi_short_lower"],
+            param_dict["rsi_short_upper"],
+            param_dict["length"],
+            param_dict["percentile_low"],
+            param_dict["percentile_high"],
+            param_dict["risk_percent"],
+            param_dict["risk_multiplier"],
+            param_dict["max_risk_percent"],
+            param_dict["reward_risk_ratio"],
+            # Sharpe Ratio
+            sharpe_analysis.get("sharperatio", "N/A"),
+            # Drawdown Analysis
+            drawdown_analysis["drawdown"],
+            drawdown_analysis["moneydown"],
+            drawdown_analysis["max"]["drawdown"],
+            drawdown_analysis["max"]["moneydown"],
+            drawdown_analysis["max"]["len"],
+            # Trade Analysis
+            trade_analysis.total.total,
+            trade_analysis.total.open,
+            trade_analysis.total.closed,
+            trade_analysis.streak.won.current,
+            trade_analysis.streak.won.longest,
+            trade_analysis.streak.lost.current,
+            trade_analysis.streak.lost.longest,
+            # Profit and Loss (PnL)
+            trade_analysis.pnl.gross.total,
+            trade_analysis.pnl.gross.average,
+            trade_analysis.pnl.net.total,
+            # Winning Trades
+            trade_analysis.won.total,
+            trade_analysis.won.pnl.total,
+            trade_analysis.won.pnl.average,
+            trade_analysis.won.pnl.max,
+            # Losing Trades
+            trade_analysis.lost.total,
+            trade_analysis.lost.pnl.total,
+            trade_analysis.lost.pnl.average,
+            trade_analysis.lost.pnl.max,
+        ]
+
+        # Write to Google Sheets (or other destination)
+        sheet_id = "1PowXxg89fAhbKlEdKacm-qDWyLH99U8Y2QDTLuCHiBk"
+        write_to_google_sheet(sheet_id, data)
+
+    else:
+        # Display Ending Portfolio Value
+        print("Ending Portfolio Value: {:.2f}".format(cerebro.broker.getvalue()))
+
+        # Analyze and Display Results
+        print(f"\n--- Analysis Results ---\n")
+
+        # Sharpe Ratio
+
+        print("### Sharpe Ratio")
+        print(f"  Sharpe Ratio: {sharpe_analysis.get('sharperatio', 'N/A')}")
+
+        # Drawdown Analysis
+
+        print("\n### Drawdown Analysis")
+        print(f"  Current Drawdown: {drawdown_analysis['drawdown']:.2f}%")
+        print(f"  Money Down: ${drawdown_analysis['moneydown']:.2f}")
+        print(f"  Max Drawdown: {drawdown_analysis['max']['drawdown']:.2f}%")
+        print(f"  Max Money Down: ${drawdown_analysis['max']['moneydown']:.2f}")
+        print(f"  Max Drawdown Length: {drawdown_analysis['max']['len']} bars")
+
+        # Trade Analysis
+
+        print("\n### Trade Analysis")
+        print("- Total Trades: {}".format(trade_analysis.total.total))
+        print("  - Open Trades: {}".format(trade_analysis.total.open))
+        print("  - Closed Trades: {}".format(trade_analysis.total.closed))
+        print(
+            "- Winning Streak: {} (Longest: {})".format(
+                trade_analysis.streak.won.current, trade_analysis.streak.won.longest
+            )
         )
-    )
-    print(
-        "- Losing Streak: {} (Longest: {})".format(
-            trade_analysis.streak.lost.current, trade_analysis.streak.lost.longest
+        print(
+            "- Losing Streak: {} (Longest: {})".format(
+                trade_analysis.streak.lost.current, trade_analysis.streak.lost.longest
+            )
         )
-    )
 
-    # Profit and Loss
-    print("\n#### Profit and Loss (PnL)")
-    print(f"- Gross PnL: ${trade_analysis.pnl.gross.total:.2f}")
-    print(f"- Average PnL: ${trade_analysis.pnl.gross.average:.2f}")
-    print(f"- Net PnL: ${trade_analysis.pnl.net.total:.2f}")
+        # Profit and Loss
+        print("\n#### Profit and Loss (PnL)")
+        print(f"- Gross PnL: ${trade_analysis.pnl.gross.total:.2f}")
+        print(f"- Average PnL: ${trade_analysis.pnl.gross.average:.2f}")
+        print(f"- Net PnL: ${trade_analysis.pnl.net.total:.2f}")
 
-    # Winning Trades
-    print("\n#### Winning Trades")
-    print(f"- Total Wins: {trade_analysis.won.total}")
-    print(f"  - Total PnL: ${trade_analysis.won.pnl.total:.2f}")
-    print(f"  - Average PnL: ${trade_analysis.won.pnl.average:.2f}")
-    print(f"  - Maximum Win: ${trade_analysis.won.pnl.max:.2f}")
+        # Winning Trades
+        print("\n#### Winning Trades")
+        print(f"- Total Wins: {trade_analysis.won.total}")
+        print(f"  - Total PnL: ${trade_analysis.won.pnl.total:.2f}")
+        print(f"  - Average PnL: ${trade_analysis.won.pnl.average:.2f}")
+        print(f"  - Maximum Win: ${trade_analysis.won.pnl.max:.2f}")
 
-    # Losing Trades
-    print("\n#### Losing Trades")
-    print(f"- Total Losses: {trade_analysis.lost.total}")
-    print(f"  - Total PnL: ${trade_analysis.lost.pnl.total:.2f}")
-    print(f"  - Average PnL: ${trade_analysis.lost.pnl.average:.2f}")
-    print(f"  - Maximum Loss: ${trade_analysis.lost.pnl.max:.2f}")
+        # Losing Trades
+        print("\n#### Losing Trades")
+        print(f"- Total Losses: {trade_analysis.lost.total}")
+        print(f"  - Total PnL: ${trade_analysis.lost.pnl.total:.2f}")
+        print(f"  - Average PnL: ${trade_analysis.lost.pnl.average:.2f}")
+        print(f"  - Maximum Loss: ${trade_analysis.lost.pnl.max:.2f}")
+
+    # Clear strategy for the next loop
+    cerebro.strats = []
+    results = None
+    strategy = None
+    sharpe_analysis = None
+    drawdown_analysis = None
+    trade_analysis = None
 
 
 def write_header():
@@ -421,6 +461,54 @@ def write_header():
     sheet_id = "1PowXxg89fAhbKlEdKacm-qDWyLH99U8Y2QDTLuCHiBk"
     clear_google_sheet(sheet_id)
     write_to_google_sheet(sheet_id, analysis_results_headers)
+
+
+def loopMain():
+    # Original parameter values
+    original_params = {
+        "ema_short": 12,
+        "ema_medium": 50,
+        "ema_long": 200,
+        "atr_period": 14,
+        "rsi_period": 14,
+        "rsi_long_lower": 55,
+        "rsi_long_upper": 70,
+        "rsi_short_lower": 30,
+        "rsi_short_upper": 45,
+        "length": 100,
+        "percentile_low": 20,
+        "percentile_high": 80,
+        "risk_percent": 10,
+        "risk_multiplier": 1.3,
+        "max_risk_percent": 30,
+        "reward_risk_ratio": 2,
+    }
+
+    # Optimizing parameter ranges
+    parameter_ranges = {
+        "rsi_long_lower": range(51, 55, 1),
+        "atr_multiplier": np.arange(1.5, 3.0, 0.1),
+        "rsi_long_upper": range(70, 75, 1),
+        "rsi_short_lower": range(25, 30, 1),
+        "rsi_short_upper": range(45, 49, 1),
+        "percentile_low": range(20, 30, 1),
+        "percentile_high": range(70, 80, 1),
+        "risk_percent": range(1, 10, 1),
+        "risk_multiplier": np.arange(1.1, 2, 0.1),
+        "max_risk_percent": range(20, 40, 1),
+        "reward_risk_ratio": np.arange(1.5, 4, 0.1),
+    }
+
+    # Create all combinations of optimizing parameters
+    param_combinations = product(*parameter_ranges.values())
+
+    for params in param_combinations:
+        # Combine the original parameters with the current optimized parameters
+        param_dict = {
+            **original_params,
+            **{key: val for key, val in zip(parameter_ranges.keys(), params)},
+        }
+        main(**param_dict)
 
 
 # Function to loop through parameters and run backtest
@@ -563,4 +651,5 @@ def loopThroughParameters():
 
 # main()
 write_header()
-loopThroughParameters()
+# loopThroughParameters()
+loopMain()
